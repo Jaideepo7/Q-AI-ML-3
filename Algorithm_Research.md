@@ -46,8 +46,56 @@ After 5 correct answers in a row:
 ### What is it: 
 - this is a decision-making algorithm that tries new things by balanacing exploration and exploitation when means it will use what works more for a learner.
 ### How it works: 
+- The core idea is to maintain a probability distribution of each options expected reward. Then from these pick the best sample.
+#### The Process
+-  Model uncertainty with beta distribution :   Beat(alpha, beta) shows our belief about success rate : alpha = # of successes and beta = # of failures so basically higher alpha/beta raio means higher expected reward.
+-  Now sample a randome value from each beta distribution
+-  select the 'arm' with the highest sampled value
+-  Update the selected arms distribution based on good or bad ouutcome. If good increase alpha (shift distribution right) if bad increase beta (shift distribution left)
 
 
+## Example Scenario: 
+4 Quiz Strategies:
+1. Focus on weak topics    → Beta(1, 1) [unknown]
+2. Mixed difficulty        → Beta(1, 1) [unknown]
+3. Spaced repetition focus → Beta(1, 1) [unknown]
+4. Random exploration      → Beta(1, 1) [unknown]
+
+Round 1:
+- Sample from each: [0.7, 0.3, 0.5, 0.2]
+- Pick Strategy 1 (highest sample)
+- User scores 0.8 → Update: Beta(1.8, 1.2)
+
+Round 2:
+- Sample: [0.6, 0.9, 0.4, 0.7]
+- Pick Strategy 2
+- User scores 0.5 → Update: Beta(1.5, 1.5)
+
+After 50 rounds:
+- Strategy 1: Beta(35, 15) → Expected reward ≈ 0.70
+- Strategy 2: Beta(18, 22) → Expected reward ≈ 0.45
+- Strategy 3: Beta(28, 17) → Expected reward ≈ 0.62
+- Strategy 4: Beta(10, 30) → Expected reward ≈ 0.25
+
+Now we mostly pick Strategy 1, but occasionally try others (exploration)
+
+
+
+# How they would ideally work together : 
+- Thompson Sampling : Choose Quiz Strategy ("focus on weak topics")
+- BKT  : Identify which topics need practice  (filter the questions with low mastery)
+- SM-2 : Checking is it time for certain topics to be reviewed again or for the first time
+- GENERATE the quiz from all the selected topics
+- User Answers Quiz
+## Updata all three systems: 
+- BKT : update the level of mastery
+- SM-2 : schedule next review
+- Thompson : Update strategy performance
+
+# Proposed Architecture 
+- Thompson Sampling (bandit layer)   - choose overall quiz strategy per session / adapt to user
+- BKT (knowledge tracking)   - maintian mastery estimates for each topic and identifiy weak topics
+- SM-2 (scheduling layer)    - optimize long term retention 
 ### Questions
 - Should we use a mastery threshold (e.g., BKT P(L) > 0.9) to "graduate" topics, or keep reviewing everything?
 - For Thompson Sampling: Should we have per-user bandits (personalized strategies) or global bandit (one-size-fits-all)?
