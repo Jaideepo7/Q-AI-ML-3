@@ -1,8 +1,15 @@
 import requests
 import time
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API key for AssemblyAI authentication
-API_KEY = "0472e76115b5459e9c1ac306d5963673"
+API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
+print(API_KEY)
+
 # Path to the audio file to be transcribed
 AUDIO_FILE = "Assembly AI Speech to Text API (Part 1) - Extract Speakers and Transcription [Z7EBdmkB8kE].mp3"
 # Headers for API requests, including authorization
