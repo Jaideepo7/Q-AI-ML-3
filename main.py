@@ -40,7 +40,11 @@ def transcribe(audio_file):
     transcript_res = requests.post(
         "https://api.assemblyai.com/v2/transcript",
         headers=headers,
-        json={"audio_url": audio_url, "speech_models": ["universal-3-pro"]}
+        json={
+            "audio_url": audio_url, 
+            "speech_models": ["universal-3-pro"],
+            "speaker_labels": True,
+            }
     )
     transcript_id = transcript_res.json()["id"]
 
@@ -51,7 +55,8 @@ def transcribe(audio_file):
         print(f"Status: {status}")
         if status == "completed":
             print("\nTranscript:\n")
-            print(result.json()["text"])
+            for utterance in result.json()["utterances"]:
+                print(f"Speaker {utterance['speaker']}: {utterance['text']}")
             break
         elif status == "error":
             print("Error:", result.json()["error"])
@@ -59,6 +64,6 @@ def transcribe(audio_file):
         time.sleep(5)
 
 # --- Run ---
-url = input("Enter YouTube URL: ")
+url = input("Enter audio URL: ")
 audio_file = download_audio(url)
 transcribe(audio_file)
