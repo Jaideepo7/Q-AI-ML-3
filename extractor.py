@@ -19,6 +19,7 @@ def download_audio(url, output_path="downloads/"):
             "preferredcodec": "mp3",
         }],
     }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         return f"{output_path}{info['title']}.mp3"
@@ -51,7 +52,6 @@ def transcribe(audio_file):
     audio_url = upload_res.json()["upload_url"]
     print("Uploaded!")
 
-    # Step 2: Request transcription
     print("Requesting transcript...")
     transcript_res = requests.post(
         "https://api.assemblyai.com/v2/transcript",
@@ -83,28 +83,34 @@ def transcribe(audio_file):
             f"https://api.assemblyai.com/v2/transcript/{transcript_id}", headers=headers)
         result_json = result.json()
         status = result_json["status"]
-        print(f"Status: {status}")
+        percent = result_json.get("percent_complete", 0)
+
+        print(f"Status: {status} - {percent}% complete", end="\r")
 
         if status == "completed":
             utterances = result_json.get("utterances") or []
 
-            # Determine significant speakers
             keep = get_significant_speakers(utterances)
 
-            print("\n=== Transcript (significant speakers only) ===\n")
+            transcript = []
             for u in utterances:
                 if u["speaker"] in keep:
-                    translated = u.get("translated_texts", {}
-                                       ).get("en", u["text"])
-                    print(f"Speaker {u['speaker']}: {translated}")
-            break
+                    translated = u.get("translated_texts", {}).get("en", u["text"])
+                    transcript.append(f"Speaker {u['speaker']}: {translated}")
+            
+            if os.path.exists(audio_file):
+                os.remove(audio_file)
+                print(f"Deleted : {audio_file}")
+            
+            return "\n".join(transcript)
 
         elif status == "error":
             print("Error:", result_json["error"])
             break
 
         time.sleep(5)
+    
 
 url = input("Enter audio URL: ")
 audio_file = download_audio(url)
-transcribe(audio_file)
+result = transcribe(audio_file)
