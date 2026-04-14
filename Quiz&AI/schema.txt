@@ -1,7 +1,7 @@
 JSON SCHEMA:
 quiz_title: "string",
 source_summary: "string",
-questions: Array with objects for 
+questions: Array with objects for: 
 id: "question_number",
 type: "mcq",
 question: "string",
