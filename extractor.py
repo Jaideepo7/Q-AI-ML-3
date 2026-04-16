@@ -113,4 +113,4 @@ def transcribe(audio_file):
 
 url = input("Enter audio URL: ")
 audio_file = download_audio(url)
-result = transcribe(audio_file)
+transcribe(audio_file)
