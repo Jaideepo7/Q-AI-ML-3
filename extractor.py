@@ -2,6 +2,7 @@ import requests
 import time
 import os
 import yt_dlp
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -102,7 +103,12 @@ def transcribe(audio_file):
                 os.remove(audio_file)
                 print(f"Deleted : {audio_file}")
             
-            return "\n".join(transcript)
+            return json.dumps({
+                "transcript": [
+                    {"speaker": u["speaker"], "text": u.get("translated_texts", {}).get("en", u["text"])}
+                    for u in utterances if u["speaker"] in keep
+                ]
+            })
 
         elif status == "error":
             print("Error:", result_json["error"])
@@ -113,4 +119,4 @@ def transcribe(audio_file):
 
 url = input("Enter audio URL: ")
 audio_file = download_audio(url)
-result = transcribe(audio_file)
+transcribe(audio_file)
