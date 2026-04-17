@@ -1,0 +1,124 @@
+{
+  "quiz": [
+    {
+      "id": 1,
+      "question": "How has urban gardening transformed dense cities?",
+      "options": {
+        "A": "By replacing all concrete structures with green spaces.",
+        "B": "By turning rooftops, balconies, and abandoned lots into pockets of green life.",
+        "C": "By making cities completely self-sufficient in food production.",
+        "D": "By eliminating the need for traditional parks."
+      },
+      "correct_answer": "B",
+      "explanation": "The transcript states that urban gardening has transformed rooftops, balconies, and abandoned lots into pockets of green life within dense cities."
+    },
+    {
+      "id": 2,
+      "question": "According to the transcript, what makes urban gardening accessible?",
+      "options": {
+        "A": "The availability of expensive, high-tech equipment.",
+        "B": "The requirement of acres of land for cultivation.",
+        "C": "The need for only a few pots, some soil, and patience.",
+        "D": "The exclusive use of vertical gardens and hydroponic systems."
+      },
+      "correct_answer": "C",
+      "explanation": "The transcript states, 'You don't need acres of land or expensive equipment \u2014 just a few pots, some soil, and a bit of patience.'"
+    },
+    {
+      "id": 3,
+      "question": "What personal benefit, besides skill, does the process of urban gardening build?",
+      "options": {
+        "A": "A sense of isolation from fast-paced city life.",
+        "B": "A sense of mindfulness.",
+        "C": "A desire for more expensive equipment.",
+        "D": "A competitive spirit among gardeners."
+      },
+      "correct_answer": "B",
+      "explanation": "The transcript mentions that the process builds not only skill but also a sense of mindfulness that is often missing in fast-paced city life."
+    },
+    {
+      "id": 4,
+      "question": "Which of the following is NOT listed as an environmental benefit of urban gardening?",
+      "options": {
+        "A": "Improving air quality.",
+        "B": "Reducing urban heat.",
+        "C": "Supporting pollinators like bees and butterflies.",
+        "D": "Eliminating all carbon emissions from cities."
+      },
+      "correct_answer": "D",
+      "explanation": "The transcript lists improving air quality, reducing urban heat, and supporting pollinators as benefits, but not eliminating all carbon emissions."
+    },
+    {
+      "id": 5,
+      "question": "In some neighborhoods, what have community gardens become?",
+      "options": {
+        "A": "Exclusive clubs for experienced gardeners.",
+        "B": "Gathering spaces where people share knowledge, food, and culture.",
+        "C": "Commercial ventures for selling produce.",
+        "D": "Designated areas for waste disposal."
+      },
+      "correct_answer": "B",
+      "explanation": "The transcript states that community gardens have become gathering spaces where people share knowledge, food, and culture."
+    },
+    {
+      "id": 6,
+      "question": "What are some challenges associated with urban gardening mentioned in the transcript?",
+      "options": {
+        "A": "Too much space, consistent sunlight, and predictable weather.",
+        "B": "Limited space, inconsistent sunlight, and unpredictable weather.",
+        "C": "Lack of interest from city dwellers.",
+        "D": "High cost of basic gardening supplies."
+      },
+      "correct_answer": "B",
+      "explanation": "The transcript explicitly lists 'Limited space, inconsistent sunlight, and unpredictable weather' as challenges."
+    },
+    {
+      "id": 7,
+      "question": "How do many gardeners adapt to urban conditions despite the challenges?",
+      "options": {
+        "A": "By giving up gardening altogether.",
+        "B": "By exclusively using traditional farming methods.",
+        "C": "By encouraging creativity and experimentation with methods like vertical gardens and hydroponic systems.",
+        "D": "By moving to rural areas."
+      },
+      "correct_answer": "C",
+      "explanation": "The transcript states that many gardeners see constraints as part of the experience, encouraging creativity and experimentation, citing vertical gardens and hydroponic systems as examples."
+    },
+    {
+      "id": 8,
+      "question": "Beyond just growing plants, what is urban gardening ultimately about?",
+      "options": {
+        "A": "Maximizing crop yield for profit.",
+        "B": "Cultivating resilience, creativity, and connection.",
+        "C": "Competing with large-scale agricultural operations.",
+        "D": "Replacing all public parks with private gardens."
+      },
+      "correct_answer": "B",
+      "explanation": "The transcript concludes by stating, 'urban gardening is more than just growing plants \u2014 it's about cultivating resilience, creativity, and connection.'"
+    },
+    {
+      "id": 9,
+      "question": "What does the presence of small containers filled with plants in apartment windows prove regarding space?",
+      "options": {
+        "A": "That ample space is absolutely essential for gardening.",
+        "B": "That space is less important than intention.",
+        "C": "That apartment windows are the only viable urban gardening spots.",
+        "D": "That large gardens are impractical in any setting."
+      },
+      "correct_answer": "B",
+      "explanation": "The transcript states that small containers in apartment windows prove 'that space is less important than intention.'"
+    },
+    {
+      "id": 10,
+      "question": "How was urban gardening initially perceived before its transformation?",
+      "options": {
+        "A": "As a meaningful way to connect with nature.",
+        "B": "As an impractical hobby.",
+        "C": "As a significant contributor to environmental benefits.",
+        "D": "As a primary source of food for dense cities."
+      },
+      "correct_answer": "B",
+      "explanation": "The transcript mentions, 'What once seemed like an impractical hobby has become a meaningful way...'"
+    }
+  ]
+}
