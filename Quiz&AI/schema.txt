@@ -1,0 +1,12 @@
+JSON SCHEMA:
+quiz_title: "string",
+source_summary: "string",
+questions: Array with objects for: 
+id: "question_number",
+type: "mcq",
+question: "string",
+options: Array : ["A. ...", "B. ...", "C. ...", "D. ..."],
+correct_answer: select_option,
+explanation: "string",
+difficulty: (put string difficulty level)
+source_reference: "string"
