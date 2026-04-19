@@ -1,6 +1,6 @@
 # Fast API backend for Q-AI Project
-from fastapi import FastAPI
-from pydantic import BaseModel, HttpUrl
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, HttpUrl, EmailStr
 from typing import List
 import os
 from dotenv import load_dotenv
@@ -34,6 +34,10 @@ class AnswerSubmission(BaseModel):
     question_id: str
     selected_option: str
 
+class UserAuth(BaseModel):
+    email: EmailStr
+    password: str
+
 # --- API Endpoints ---
 
 @app.get("/")
@@ -52,6 +56,12 @@ async def generate_from_url(data: videoURL):
             "youtube_url": str(data.url)
         }).execute()
         
+        # Check if data was actually returned
+        if not video_entry.data:
+            print("ERROR: Supabase accepted the request but returned no data.")
+            # Some versions of the client return error info here:
+            print("Response details:", video_entry)
+
         video_id = video_entry.data[0]['id']
 
         # Step 2: Create a Quiz Shell linked to this video
@@ -140,3 +150,44 @@ async def check_progress(user_id: str):
         "user_id": user_id, 
         "progress": "75%", 
         "message": "User is making good progress!"}
+
+@app.post("/signup")
+async def signup(auth: UserAuth):
+    try:
+        # This triggers the Supabase Auth system
+        # The Trigger we just created in SQL will handle the public.users table!
+        res = supabase.auth.sign_up({
+            "email": auth.email,
+            "password": auth.password
+        })
+        
+        return {
+            "status": "success", 
+            "message": "User created. Check your email for confirmation!",
+            "user_id": res.user.id
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/login")
+async def login(auth: UserAuth):
+    try:
+        res = supabase.auth.sign_in_with_password({
+            "email": auth.email,
+            "password": auth.password
+        })
+
+        if not getattr(res, "session", None) or not getattr(res, "user", None):
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+        return {
+            "status": "success",
+            "session": {
+                "access_token": res.session.access_token,
+                "user_id": res.user.id
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
