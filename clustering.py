@@ -202,7 +202,7 @@ Do NOT include punctuation or explanation — just the label."""
             response = model.models.generate_content(
                 model="gemini-2.0-flash",
                 contents=prompt
-        )
+            )
             label_text = response.text.strip()
             cluster_labels[cluster_id] = label_text
             print(f"[Gemini] Cluster {cluster_id} → '{label_text}'")
