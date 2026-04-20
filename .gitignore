@@ -1,7 +1,30 @@
-venv/
+# Environment
 .env
+.env.*
+
+# Python
 __pycache__/
 *.pyc
-.env
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Downloads (audio files)
+downloads/
 *.mp3
+*.mp4
+*.wav
+*.webm
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+tempCodeRunnerFile.py
 extractor2.py
+quiz_output.json

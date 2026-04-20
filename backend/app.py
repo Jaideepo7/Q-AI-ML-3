@@ -1,16 +1,20 @@
 # Fast API backend for Q-AI Project
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, HttpUrl, EmailStr
-from typing import List
+from pydantic import BaseModel, HttpUrl, EmailStr, field_validator
+from typing import List, Optional
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from extractor import download_audio, transcribe
 
 # Load environment variables
 load_dotenv()
 
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
+if not url or not key:
+    raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
+
 supabase: Client = create_client(url, key)
 
 app = FastAPI(title = "Q-AI Project API")
@@ -28,6 +32,7 @@ class QuizResponse(BaseModel):
 
 class videoURL(BaseModel):
     url: HttpUrl
+    user_id: Optional[str] = None
 
 class AnswerSubmission(BaseModel):
     user_id: str
@@ -38,6 +43,13 @@ class UserAuth(BaseModel):
     email: EmailStr
     password: str
 
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters.")
+        return v
+
 # --- API Endpoints ---
 
 @app.get("/")
@@ -46,25 +58,31 @@ async def root():
 
 @app.post("/generate")
 async def generate_from_url(data: videoURL):
-    # For now, we use a hardcoded user_id until you have Auth set up
-    temp_user_id = "00000000-0000-0000-0000-000000000000" 
-    
+    user_id = data.user_id or "00000000-0000-0000-0000-000000000000"
+    video_url = str(data.url)
+
     try:
-        # Step 1: Create Video Entry
+        # Step 1: Create video record
         video_entry = supabase.table("videos").insert({
-            "user_id": temp_user_id,
-            "youtube_url": str(data.url)
+            "user_id": user_id,
+            "youtube_url": video_url
         }).execute()
-        
-        # Check if data was actually returned
+
         if not video_entry.data:
-            print("ERROR: Supabase accepted the request but returned no data.")
-            # Some versions of the client return error info here:
-            print("Response details:", video_entry)
+            raise HTTPException(status_code=500, detail="Failed to create video record.")
 
-        video_id = video_entry.data[0]['id']
+        video_id = video_entry.data[0]["id"]
 
-        # Step 2: Create a Quiz Shell linked to this video
+        # Step 2: Download audio and transcribe
+        audio_file = download_audio(video_url)
+        transcript_json = transcribe(audio_file)
+
+        # Step 3: Save transcript to video record
+        supabase.table("videos").update({
+            "transcript": transcript_json
+        }).eq("id", video_id).execute()
+
+        # Step 4: Create quiz shell linked to this video
         quiz_entry = supabase.table("quizzes").insert({
             "vid_id": video_id
         }).execute()
@@ -72,11 +90,14 @@ async def generate_from_url(data: videoURL):
         return {
             "status": "success",
             "video_id": video_id,
-            "quiz_id": quiz_entry.data[0]['id'],
-            "message": "Database records initialized."
+            "quiz_id": quiz_entry.data[0]["id"],
+            "transcript": transcript_json,
+            "message": "Transcript complete. Ready to generate quiz."
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/quiz", response_model=QuizResponse)
 async def get_quiz():
