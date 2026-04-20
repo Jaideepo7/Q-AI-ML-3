@@ -45,7 +45,11 @@ if not st.session_state.logged_in:
         if st.button("Register"):
             res = requests.post(f"{BACKEND_URL}/signup", json={"email": new_email, "password": new_pwd})
             if res.status_code == 200:
-                st.success("Account created! Now please log in.")
+                data = res.json()
+                if data.get("status") == "success":
+                    st.success("Account created! Now please log in.")
+                else:
+                    st.error(f"Registration failed: {data.get('message', 'Unknown error')}")
             else:
                 st.error("Registration failed. Email might already be in use.")
 
