@@ -47,20 +47,15 @@ if not st.session_state.logged_in:
         new_email = st.text_input("Email", key="signup_email")
         new_pwd = st.text_input("Password", type="password", key="signup_pwd")
         if st.button("Register"):
-            if not new_email:
-                st.error("Email is required.")
-            elif len(new_pwd) < 8:
-                st.error("Password must be at least 8 characters.")
-            else:
-                res = requests.post(f"{BACKEND_URL}/signup", json={"email": new_email, "password": new_pwd})
-                if res.status_code == 200:
-                    data = res.json()
-                    if data.get("status") == "success":
-                        st.success("Account created!")
-                    else:
-                        st.error(data.get("message", "Registration failed."))
+            res = requests.post(f"{BACKEND_URL}/signup", json={"email": new_email, "password": new_pwd})
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("status") == "success":
+                    st.success("Account created! Now please log in.")
                 else:
-                    st.error(res.json().get("detail", "Registration failed. Email might already be in use."))
+                    st.error(f"Registration failed: {data.get('message', 'Unknown error')}")
+            else:
+                st.error("Registration failed. Email might already be in use.")
 
 # --- MAIN APP UI (Only shows if logged_in is True) ---
 else:

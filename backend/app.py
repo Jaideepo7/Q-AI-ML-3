@@ -182,13 +182,16 @@ async def signup(auth: UserAuth):
             "password": auth.password
         })
         
+        if not res.user:
+            return {"status": "error", "message": "Signup failed. Please check your email or try a different password."}
+        
         return {
             "status": "success", 
-            "message": "User created. Check your email for confirmation!",
+            "message": "User created. You can now log in!",
             "user_id": res.user.id
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": f"Signup error: {str(e)}"}
 
 @app.post("/login")
 async def login(auth: UserAuth):
