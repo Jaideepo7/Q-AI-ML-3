@@ -10,6 +10,14 @@ load_dotenv()
 API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 headers = {"authorization": API_KEY}
 
+_FFMPEG_BIN = os.path.join(
+    os.environ.get("LOCALAPPDATA", ""),
+    "Microsoft", "WinGet", "Packages",
+    "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe",
+    "ffmpeg-8.1-full_build", "bin",
+)
+
+
 def download_audio(url, output_path="downloads/"):
     os.makedirs(output_path, exist_ok=True)
     ydl_opts = {
@@ -19,6 +27,7 @@ def download_audio(url, output_path="downloads/"):
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
         }],
+        "ffmpeg_location": _FFMPEG_BIN,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

@@ -20,6 +20,7 @@ Usage:
 import json
 import re
 import os
+import time
 import spacy
 from google import genai
 from google.genai import types
@@ -30,7 +31,8 @@ from dotenv import load_dotenv
 # Configuration
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_FALLBACK_MODELS = ["gemini-1.5-flash", "gemini-2.5-flash"]
 
 SYSTEM_INSTRUCTION = """
 You are an expert quiz creator. Read the given video transcript and produce
@@ -182,18 +184,36 @@ def generate_quiz(transcript: str, api_key: str, model: str = GEMINI_MODEL) -> l
         entities_block=entities_block,
     )
 
-    response = client.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            temperature=0.4,
-            top_p=0.95,
-            max_output_tokens=4096,
-        ),
-    )
+    models_to_try = [model] + [m for m in GEMINI_FALLBACK_MODELS if m != model]
+    last_error = None
+    raw_text = None
 
-    raw_text = response.text.strip()
+    for attempt_model in models_to_try:
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model=attempt_model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION,
+                        temperature=0.4,
+                        top_p=0.95,
+                        max_output_tokens=4096,
+                    ),
+                )
+                raw_text = response.text.strip()
+                break
+            except Exception as e:
+                last_error = e
+                if "503" in str(e) or "UNAVAILABLE" in str(e):
+                    time.sleep(5 * (attempt + 1))
+                else:
+                    raise
+        if raw_text:
+            break
+
+    if raw_text is None:
+        raise RuntimeError(f"All Gemini models unavailable. Last error: {last_error}")
     cleaned = _strip_markdown_fences(raw_text)
 
     try:

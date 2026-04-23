@@ -57,21 +57,26 @@ def get_gemini_model():
 # Part 1 — Fetch stored embeddings from Supabase
 # ---------------------------------------------------------------------------
 
-def fetch_embeddings() -> Tuple[List[int], List[str], np.ndarray]:
+def fetch_embeddings(video_id: str) -> Tuple[List[str], List[str], np.ndarray]:
     """
-    Fetch all rows from transcript_chunks.
+    Fetch all chunks for a specific video from the chunks table.
 
     Returns:
-        ids       : list of row IDs
+        ids       : list of row UUIDs
         contents  : list of chunk text strings
         embeddings: numpy array of shape (n_chunks, 384)
     """
     client = get_supabase_client()
-    response = client.table("transcript_chunks").select("id, content, embedding").execute()
+    response = (
+        client.table("chunks")
+        .select("id, content, embedding")
+        .eq("vid_id", video_id)
+        .execute()
+    )
     rows = response.data or []
 
     if not rows:
-        raise ValueError("No chunks found in Supabase. Run vector_pipeline.py first.")
+        raise ValueError(f"No chunks found for video_id={video_id}. Run vector_pipeline first.")
 
     ids, contents, embeddings = [], [], []
 
@@ -79,7 +84,6 @@ def fetch_embeddings() -> Tuple[List[int], List[str], np.ndarray]:
         ids.append(row["id"])
         contents.append(row["content"])
 
-        # embedding stored as "[0.1,0.2,...]" string or list
         vec = row["embedding"]
         if isinstance(vec, str):
             vec = np.fromstring(vec.strip("[]"), sep=",", dtype=float)
@@ -87,7 +91,7 @@ def fetch_embeddings() -> Tuple[List[int], List[str], np.ndarray]:
             vec = np.array(vec, dtype=float)
         embeddings.append(vec)
 
-    print(f"[Fetch] Loaded {len(ids)} chunks from Supabase.")
+    print(f"[Fetch] Loaded {len(ids)} chunks for video_id={video_id}.")
     return ids, contents, np.array(embeddings)
 
 
@@ -219,78 +223,98 @@ Do NOT include punctuation or explanation — just the label."""
 # ---------------------------------------------------------------------------
 
 def store_cluster_labels(
-    ids:            List[int],
+    ids:            List[str],
     labels:         np.ndarray,
     cluster_labels: Dict[int, str],
 ) -> None:
     """
-    Update each row in transcript_chunks with its cluster_id and cluster_label.
+    Update each row in chunks with its topic_label derived from DBSCAN cluster.
 
     Args:
-        ids            : list of Supabase row IDs
+        ids            : list of Supabase row UUIDs
         labels         : DBSCAN labels per chunk
         cluster_labels : dict mapping cluster_id → label string
     """
     client = get_supabase_client()
-    print(f"\n[Storage] Updating {len(ids)} rows with cluster labels...")
+    print(f"\n[Storage] Updating {len(ids)} rows with topic labels...")
 
     for row_id, cluster_id in zip(ids, labels):
         label_text = cluster_labels.get(int(cluster_id), "Uncategorized")
-        client.table("transcript_chunks").update({
-            "cluster_id":    int(cluster_id),
-            "cluster_label": label_text,
+        client.table("chunks").update({
+            "topic_label": label_text,
         }).eq("id", row_id).execute()
 
-    print("[Storage] Done. All cluster labels stored in Supabase.")
+    print("[Storage] Done. All topic labels stored in Supabase.")
 
 
 # ---------------------------------------------------------------------------
 # Part 5 — RAG retrieval using Supabase match_chunks function
 # ---------------------------------------------------------------------------
 
-def rag_retrieve(query: str, top_k: int = 5) -> List[Dict]:
+def rag_retrieve(query: str, video_id: str, top_k: int = 5) -> List[Dict]:
     """
-    Embed a query string and retrieve the most semantically similar chunks
-    from Supabase using the match_chunks SQL function (pgvector cosine search).
-
-    This is what the quiz generator will call to get context before
-    sending a prompt to Gemini.
+    Embed a query and retrieve the most semantically similar chunks for a
+    specific video using Python cosine similarity (no RPC required).
 
     Args:
-        query (str): A topic or question, e.g. "What is supervised learning?"
-        top_k (int): Number of chunks to retrieve. Default 5.
+        query    : Topic or question string, e.g. "What is supervised learning?"
+        video_id : UUID of the video to scope the search to.
+        top_k    : Number of chunks to retrieve. Default 5.
 
     Returns:
-        List of dicts: [{"id", "content", "cluster_label", "similarity"}, ...]
+        List of dicts: [{"id", "content", "topic_label", "similarity"}, ...]
     """
-    # Import here to avoid circular imports
-    from vector_pipeline import EMBEDDING_MODEL
+    from vector_pipeline import EMBEDDING_MODEL, _parse_vector
 
     print(f"\n[RAG] Retrieving top {top_k} chunks for query: '{query}'")
-    query_embedding = EMBEDDING_MODEL.embed_query(query)
+    query_vec = np.array(EMBEDDING_MODEL.embed_query(query), dtype=float)
+    query_norm = np.linalg.norm(query_vec)
+    if query_norm == 0:
+        return []
 
     client = get_supabase_client()
-    response = client.rpc("match_chunks", {
-        "query_embedding": query_embedding,
-        "match_count":     top_k,
-    }).execute()
+    response = (
+        client.table("chunks")
+        .select("id, content, topic_label, embedding")
+        .eq("vid_id", video_id)
+        .execute()
+    )
+    rows = response.data or []
 
-    results = response.data or []
+    scored = []
+    for row in rows:
+        vec = _parse_vector(row.get("embedding"))
+        if vec.size == 0 or vec.shape[0] != query_vec.shape[0]:
+            continue
+        denom = np.linalg.norm(vec) * query_norm
+        if denom == 0:
+            continue
+        similarity = float(np.dot(query_vec, vec) / denom)
+        scored.append({
+            "id":          row["id"],
+            "content":     row["content"],
+            "topic_label": row.get("topic_label", "Uncategorized"),
+            "similarity":  similarity,
+        })
+
+    scored.sort(key=lambda r: r["similarity"], reverse=True)
+    results = scored[:top_k]
+
     print(f"[RAG] Retrieved {len(results)} chunks.")
-
     for i, r in enumerate(results):
-        print(f"  [{i}] (sim={r['similarity']:.3f}) [{r['cluster_label']}] "
+        print(f"  [{i}] (sim={r['similarity']:.3f}) [{r['topic_label']}] "
               f"{r['content'][:80]}...")
 
     return results
 
 
-def run_clustering_pipeline() -> None:
+def run_clustering_pipeline(video_id: str) -> None:
     """
-    Fetch embeddings from Supabase, cluster them, label with Gemini,
-    and store labels back. Call this after run_vector_pipeline().
+    Fetch embeddings for a video, cluster with DBSCAN, label with Gemini,
+    and store topic_labels back in chunks table.
+    Call this after run_vector_pipeline().
     """
-    ids, contents, embeddings = fetch_embeddings()
+    ids, contents, embeddings = fetch_embeddings(video_id)
     labels, best_eps          = run_dbscan_experiments(embeddings)
     cluster_labels            = label_clusters_with_gemini(contents, labels)
     store_cluster_labels(ids, labels, cluster_labels)

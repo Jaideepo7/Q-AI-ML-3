@@ -15,6 +15,10 @@ Usage:
 import os
 import sys
 import json
+
+# Windows cp1252 console can't render emoji — force UTF-8 output
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
 from datetime import datetime
 from typing import Dict, List, Optional
 

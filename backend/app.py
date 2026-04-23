@@ -3,17 +3,27 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl, EmailStr, field_validator
 from typing import List, Optional
 import os
-from dotenv import load_dotenv
+import json
+import logging
+from dotenv import load_dotenv, find_dotenv
 from supabase import create_client, Client
 from extractor import download_audio, transcribe
+from quiz_generator import generate_quiz
+from nlp import tokenize_text
 
-# Load environment variables
-load_dotenv()
+# Load environment variables — find_dotenv walks up from backend/ to locate repo-root .env
+load_dotenv(find_dotenv())
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
+# Service role key bypasses RLS — required for server-side writes.
+# Falls back to SUPABASE_KEY if service role key not yet configured.
+key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_KEY")
+gemini_api_key: str = os.environ.get("GEMINI_API_KEY")
 if not url or not key:
-    raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
+    raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in .env")
 
 supabase: Client = create_client(url, key)
 
@@ -61,6 +71,9 @@ async def generate_from_url(data: videoURL):
     user_id = data.user_id or "00000000-0000-0000-0000-000000000000"
     video_url = str(data.url)
 
+    if not gemini_api_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured.")
+
     try:
         # Step 1: Create video record
         video_entry = supabase.table("videos").insert({
@@ -73,30 +86,70 @@ async def generate_from_url(data: videoURL):
 
         video_id = video_entry.data[0]["id"]
 
-        # Step 2: Download audio and transcribe
+        # Step 2: Download audio and transcribe via AssemblyAI
+        logger.info("Downloading and transcribing audio for video_id=%s", video_id)
         audio_file = download_audio(video_url)
         transcript_json = transcribe(audio_file)
 
-        # Step 3: Save transcript to video record
+        # Step 3: Save raw transcript JSON to video record
         supabase.table("videos").update({
             "transcript": transcript_json
         }).eq("id", video_id).execute()
 
-        # Step 4: Create quiz shell linked to this video
+        # Step 4: Extract plain text from speaker-diarized transcript
+        transcript_data = json.loads(transcript_json)
+        plain_transcript = " ".join(
+            utt["text"] for utt in transcript_data.get("transcript", [])
+        )
+
+        # Step 5: Validate transcript length via NLP tokenization before calling Gemini
+        tokens = tokenize_text(plain_transcript)
+        logger.info("Transcript token count: %d", len(tokens))
+        if len(tokens) < 20:
+            raise HTTPException(
+                status_code=422,
+                detail="Transcript too short to generate a meaningful quiz."
+            )
+
+        # Step 6: Generate 10 MCQs with spaCy NER + Gemini
+        logger.info("Generating quiz questions for video_id=%s", video_id)
+        questions = generate_quiz(plain_transcript, api_key=gemini_api_key)
+
+        # Step 7: Create quiz record linked to the video
         quiz_entry = supabase.table("quizzes").insert({
             "vid_id": video_id
         }).execute()
 
+        if not quiz_entry.data:
+            raise HTTPException(status_code=500, detail="Failed to create quiz record.")
+
+        quiz_id = quiz_entry.data[0]["id"]
+
+        # Step 8: Persist each question to the questions table
+        question_rows = []
+        for q in questions:
+            opts: dict = q["options"]  # {"A": "...", "B": "...", "C": "...", "D": "..."}
+            question_rows.append({
+                "quiz_id": quiz_id,
+                "question_text": q["question"],
+                "options": [f"{letter}: {text}" for letter, text in opts.items()],
+                "correct_answer": q["correct_answer"],
+            })
+
+        supabase.table("questions").insert(question_rows).execute()
+        logger.info("Stored %d questions for quiz_id=%s", len(question_rows), quiz_id)
+
         return {
             "status": "success",
             "video_id": video_id,
-            "quiz_id": quiz_entry.data[0]["id"],
-            "transcript": transcript_json,
-            "message": "Transcript complete. Ready to generate quiz."
+            "quiz_id": quiz_id,
+            "question_count": len(questions),
+            "message": f"Quiz generated with {len(questions)} questions.",
         }
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Error in /generate")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/quiz", response_model=QuizResponse)

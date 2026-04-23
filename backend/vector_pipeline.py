@@ -121,24 +121,28 @@ def embed_chunks(chunks: List[str]) -> List[List[float]]:
 # Part 3 — Store chunks + embeddings in Supabase (Postgres + pgvector)
 # ---------------------------------------------------------------------------
 
-def store_in_supabase(chunks: List[str], embeddings: List[List[float]]) -> None:
+def store_in_supabase(
+    chunks: List[str],
+    embeddings: List[List[float]],
+    video_id: str,
+) -> None:
     if len(chunks) != len(embeddings):
         raise ValueError("chunks and embeddings must have the same length.")
 
     client = get_supabase_client()
-
-    print(f"[Storage] Inserting {len(chunks)} rows into Supabase...")
+    print(f"[Storage] Inserting {len(chunks)} rows into Supabase (chunks table)...")
 
     payload = [
         {
+            "vid_id": video_id,
             "content": chunk,
-            # pgvector column accepts string literals like "[0.1,0.2,...]"
+            "chunk_index": i,
             "embedding": _embedding_to_vector_literal(embedding),
         }
-        for chunk, embedding in zip(chunks, embeddings)
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings))
     ]
 
-    client.table("transcript_chunks").insert(payload).execute()
+    client.table("chunks").insert(payload).execute()
     print("[Storage] Done. All chunks stored in Supabase.")
 
 
@@ -146,14 +150,19 @@ def store_in_supabase(chunks: List[str], embeddings: List[List[float]]) -> None:
 # Part 4 — Semantic search (used later by quiz generator to retrieve context)
 # ---------------------------------------------------------------------------
 
-def search_similar_chunks(query: str, top_k: int = 5) -> List[str]:
+def search_similar_chunks(query: str, video_id: str, top_k: int = 5) -> List[str]:
     query_embedding = np.array(EMBEDDING_MODEL.embed_query(query), dtype=float)
     query_norm = np.linalg.norm(query_embedding)
     if query_norm == 0:
         return []
 
     client = get_supabase_client()
-    response = client.table("transcript_chunks").select("content, embedding").execute()
+    response = (
+        client.table("chunks")
+        .select("content, embedding")
+        .eq("vid_id", video_id)
+        .execute()
+    )
     rows = response.data or []
 
     scored = []
@@ -176,10 +185,14 @@ def search_similar_chunks(query: str, top_k: int = 5) -> List[str]:
 # Main pipeline — call this from app.py with a transcript + video duration
 # ---------------------------------------------------------------------------
 
-def run_vector_pipeline(transcript: str, video_duration_seconds: int) -> None:
+def run_vector_pipeline(
+    transcript: str,
+    video_id: str,
+    video_duration_seconds: int = 600,
+) -> None:
     chunks     = chunk_transcript(transcript, video_duration_seconds)
     embeddings = embed_chunks(chunks)
-    store_in_supabase(chunks, embeddings)
+    store_in_supabase(chunks, embeddings, video_id)
 
 
 # ---------------------------------------------------------------------------
