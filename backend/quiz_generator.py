@@ -198,7 +198,7 @@ def generate_quiz(transcript: str, api_key: str, model: str = GEMINI_MODEL) -> l
                         system_instruction=SYSTEM_INSTRUCTION,
                         temperature=0.4,
                         top_p=0.95,
-                        max_output_tokens=4096,
+                        max_output_tokens=8192,
                     ),
                 )
                 raw_text = response.text.strip()
@@ -218,10 +218,19 @@ def generate_quiz(transcript: str, api_key: str, model: str = GEMINI_MODEL) -> l
 
     try:
         data = json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        raise ValueError(
-            f"Gemini returned invalid JSON.\nParse error: {e}\nRaw response:\n{raw_text[:500]}"
-        ) from e
+    except json.JSONDecodeError:
+        # Response was truncated — recover complete question objects only
+        last_brace = cleaned.rfind("},")
+        if last_brace != -1:
+            recovered = cleaned[: last_brace + 1] + "\n  ]\n}"
+            try:
+                data = json.loads(recovered)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Gemini returned invalid JSON.\nParse error: {e}\nRaw response:\n{raw_text[:500]}"
+                ) from e
+        else:
+            raise ValueError(f"Gemini returned invalid JSON.\nRaw response:\n{raw_text[:500]}")
 
     questions = data.get("quiz", [])
     if not questions:

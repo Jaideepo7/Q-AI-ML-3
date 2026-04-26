@@ -5,6 +5,8 @@ from typing import List, Optional
 import os
 import json
 import logging
+import urllib.request as _ureq
+import urllib.parse as _uparse
 from dotenv import load_dotenv, find_dotenv
 from supabase import create_client, Client
 from extractor import download_audio, transcribe
@@ -14,8 +16,31 @@ from nlp import tokenize_text
 # Load environment variables — find_dotenv walks up from backend/ to locate repo-root .env
 load_dotenv(find_dotenv())
 
+from routers.session import router as session_router
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _get_youtube_title(url: str) -> Optional[str]:
+    try:
+        qs = _uparse.urlencode({"url": url, "format": "json"})
+        req = _ureq.Request(
+            f"https://www.youtube.com/oembed?{qs}",
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        with _ureq.urlopen(req, timeout=5) as r:
+            return json.loads(r.read()).get("title")
+    except Exception:
+        return None
+
+
+def _short_label(url: str) -> str:
+    if "v=" in url:
+        return url.split("v=")[-1][:11]
+    if "youtu.be/" in url:
+        return url.split("youtu.be/")[-1][:11]
+    return url[-20:]
 
 url: str = os.environ.get("SUPABASE_URL")
 # Service role key bypasses RLS — required for server-side writes.
@@ -28,6 +53,7 @@ if not url or not key:
 supabase: Client = create_client(url, key)
 
 app = FastAPI(title = "Q-AI Project API")
+app.include_router(session_router)
 
 # --- Pydantic Models ---
 class QuizQuestion(BaseModel):
@@ -37,6 +63,7 @@ class QuizQuestion(BaseModel):
     answer: str
 
 class QuizResponse(BaseModel):
+    quiz_id: Optional[str] = None
     video_name: str
     questions: List[QuizQuestion]
 
@@ -177,7 +204,7 @@ async def get_quiz():
                             answer=q['correct_answer']
                         )
                     )
-                return QuizResponse(video_name=video_name, questions=formatted_questions)
+                return QuizResponse(quiz_id=quiz_id, video_name=video_name, questions=formatted_questions)
                 
     except Exception as e:
         print(f"DB Error: {e}")
@@ -187,6 +214,61 @@ async def get_quiz():
         video_name="Sample Video",
         questions=[QuizQuestion(id="1", question="Capital of France?", options=["Paris", "London"], answer="Paris")]
     )
+
+@app.get("/quiz/{quiz_id}", response_model=QuizResponse)
+async def get_quiz_by_id(quiz_id: str):
+    try:
+        quiz_res = supabase.table("quizzes").select("id, videos(youtube_url)").eq("id", quiz_id).single().execute()
+        if not quiz_res.data:
+            raise HTTPException(status_code=404, detail="Quiz not found.")
+
+        video_name = (quiz_res.data.get("videos") or {}).get("youtube_url", "Unknown")
+        questions_res = supabase.table("questions").select("*").eq("quiz_id", quiz_id).execute()
+        if not questions_res.data:
+            raise HTTPException(status_code=404, detail="No questions found for this quiz.")
+
+        formatted_questions = [
+            QuizQuestion(id=q["id"], question=q["question_text"], options=q["options"], answer=q["correct_answer"])
+            for q in questions_res.data
+        ]
+        return QuizResponse(quiz_id=quiz_id, video_name=video_name, questions=formatted_questions)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/quizzes")
+async def list_quizzes(user_id: str):
+    try:
+        videos_res = supabase.table("videos").select("id, youtube_url").eq("user_id", user_id).execute()
+        if not videos_res.data:
+            return {"quizzes": []}
+
+        video_map = {v["id"]: v["youtube_url"] for v in videos_res.data}
+        video_ids = list(video_map.keys())
+
+        quizzes_res = (
+            supabase.table("quizzes")
+            .select("id, vid_id, created_at")
+            .in_("vid_id", video_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        quizzes = []
+        for q in (quizzes_res.data or []):
+            vid_url = video_map.get(q["vid_id"], "Unknown")
+            title = _get_youtube_title(vid_url) or _short_label(vid_url)
+            quizzes.append({
+                "quiz_id": q["id"],
+                "video_url": vid_url,
+                "title": title,
+                "created_at": q["created_at"],
+            })
+        return {"quizzes": quizzes}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/answer")
 async def submit_answer(submission: AnswerSubmission):
