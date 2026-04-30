@@ -31,8 +31,8 @@ from dotenv import load_dotenv
 # Configuration
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = "gemini-2.0-flash"
-GEMINI_FALLBACK_MODELS = ["gemini-1.5-flash", "gemini-2.5-flash"]
+GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_FALLBACK_MODELS = []
 
 SYSTEM_INSTRUCTION = """
 You are an expert quiz creator. Read the given video transcript and produce
@@ -205,8 +205,12 @@ def generate_quiz(transcript: str, api_key: str, model: str = GEMINI_MODEL) -> l
                 break
             except Exception as e:
                 last_error = e
-                if "503" in str(e) or "UNAVAILABLE" in str(e):
+                err_str = str(e)
+                if "503" in err_str or "UNAVAILABLE" in err_str:
                     time.sleep(5 * (attempt + 1))
+                elif "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    # Quota exhausted on this model — skip to next fallback immediately
+                    break
                 else:
                     raise
         if raw_text:
